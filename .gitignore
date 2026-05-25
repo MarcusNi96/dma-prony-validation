@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
+# Abaqus working files
+abaqus.rpy*
+abaqus*.rec
+abaqus_acis.log
+*.odb
+*.lck
+*.com
+*.dat
+*.msg
+*.prt
+*.sim
+*.sta
+*.jnl
+*.SMABulk
+*.SMAFocus
+simulations/
+tools/Job-*
+tools/abaqus*
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local-only working dirs / lockfile
+uv.lock
+
+# Raw measurement data — large, machine-specific.
+# Keep the processor + its README tracked.
+data/raw/*
+!data/raw/process_dma.py
+!data/raw/README.md
+
+# Pipeline outputs — regenerable from data/ + config/.
+# Final figures kept by hand can be whitelisted, e.g.:
+#   !results/<material>/prony_fit/fit.png
+results/

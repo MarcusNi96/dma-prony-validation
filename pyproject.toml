@@ -1,0 +1,15 @@
+[project]
+name = "dma-prony-validation"
+version = "0.1.0"
+description = "Validate Prony series for viscoelastic materials against shaker measurements via Abaqus FEA."
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "mastercurves",
+    "xlrd>=2",
+    "ipykernel>=6.31,<7",
+    "abqpy==2022",
+]
