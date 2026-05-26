@@ -3,7 +3,8 @@
 Reads results/<material>/master/master_curve.csv, fits N Maxwell terms,
 writes:
 
-    results/<material>/prony.json           {G_inf, prony: {g_i, tau_i}, ...}
+    results/<material>/abaqus_input.json    {base:{nu, rho, G_inf}, G_inf,
+                                             prony:{g_i, tau_i}, wlf, source}
     results/<material>/prony_fit/fit.png    G' / G'' measured + fit overlay
     results/<material>/prony_fit/fit_data.csv   freq + measured + fit
 
@@ -29,7 +30,8 @@ from scipy.optimize import nnls
 
 from core.plots import plot_master_curve_fit
 from py3.paths import (
-    REPO_ROOT, load_material, master_dir, prony_fit_dir, prony_path,
+    REPO_ROOT, abaqus_input_path, load_json,
+    master_dir, prony_fit_dir,
 )
 
 
@@ -59,32 +61,26 @@ def load_master(material):
     return freq, G
 
 
-def resolve_g_inf(args):
+def resolve_g_inf(args, base):
     """Apply the precedence rules and return (g_inf_or_None, origin_label)."""
     if args.g_inf is not None:
         return args.g_inf, "--g-inf"
     if args.fit_g_inf:
         return None, "--fit-g-inf (free NNLS parameter)"
-    base = load_material(args.material)
     g_inf = base.get("G_inf")
     if g_inf is None:
         return None, "(none provided; free NNLS parameter)"
     return float(g_inf), f"config/{args.material}/base.json"
 
 
-def load_wlf(material):
-    """Read results/<material>/master/wlf.json if it exists. Returns None otherwise."""
-    p = master_dir(material) / "wlf.json"
-    if not p.exists():
-        return None
-    return json.loads(p.read_text())
-
-
-def save_prony_json(material, G_inf, G_ins, g_i, tau_i, source_info, wlf=None):
+def save_abaqus_input(material, base, G_inf, G_ins, g_i, tau_i, source_info, wlf=None):
     out = {
-        "G_inf": float(G_inf),
-        "G_ins": float(G_ins),
+        "base":  base,                   # verbatim copy of config/<material>/base.json
         "prony": {
+            # G_inf and G_ins are the values that normalized this series:
+            # g_i = G_i / G_ins, with G_ins = G_inf + sum(G_i).
+            "G_inf": float(G_inf),
+            "G_ins": float(G_ins),
             "g_i":   [float(g) for g in g_i],
             "tau_i": [float(t) for t in tau_i],
         },
@@ -96,7 +92,7 @@ def save_prony_json(material, G_inf, G_ins, g_i, tau_i, source_info, wlf=None):
             "C2":      float(wlf["C2"]),
             "T_ref_C": float(wlf["T_ref_C"]),
         }
-    prony_path(material).write_text(json.dumps(out, indent=2))
+    abaqus_input_path(material).write_text(json.dumps(out, indent=2))
 
 
 def save_fit_data_csv(out_path, freq, modulus_meas, modulus_fit):
@@ -118,7 +114,12 @@ def main():
     print(f"{args.material}: master curve, {len(freq)} points, "
           f"f = {freq.min():g} - {freq.max():g} Hz")
 
-    G_inf, origin = resolve_g_inf(args)
+    # Read base.json + wlf.json once; pass into resolve_g_inf and save_abaqus_input.
+    base = load_json(f"config/{args.material}/base.json")
+    wlf_path = master_dir(args.material) / "wlf.json"
+    wlf = json.loads(wlf_path.read_text()) if wlf_path.exists() else None
+
+    G_inf, origin = resolve_g_inf(args, base)
 
     ### Main part
 
@@ -167,25 +168,24 @@ def main():
     # Save outputs
     fit_dir = prony_fit_dir(args.material)
     fit_dir.mkdir(parents=True, exist_ok=True)
-    prony_path(args.material).parent.mkdir(parents=True, exist_ok=True)
+    abaqus_input_path(args.material).parent.mkdir(parents=True, exist_ok=True)
 
-    wlf = load_wlf(args.material)
-    save_prony_json(args.material, G_inf, G_ins, g_i, tau_i,
-                    source_info={
-                        "method": "nnls_maxwell",
-                        "n_terms": args.n_terms,
-                        "g_inf_origin": origin,
-                    },
-                    wlf=wlf)
+    save_abaqus_input(args.material, base, G_inf, G_ins, g_i, tau_i,
+                      source_info={
+                          "method": "nnls_maxwell",
+                          "n_terms": args.n_terms,
+                          "g_inf_origin": origin,
+                      },
+                      wlf=wlf)
     if wlf:
         print(f"WLF: C1={wlf['C1']:.3f}, C2={wlf['C2']:.3f} K, "
-              f"T_ref={wlf['T_ref_C']:.1f} °C  (embedded in prony.json)")
+              f"T_ref={wlf['T_ref_C']:.1f} °C  (embedded in abaqus_input.json)")
     save_fit_data_csv(fit_dir / "fit_data.csv", freq, G_meas, G_fit)
     fit_dict = {"G_inf": G_inf, "G_i": G_i, "tau_i": tau_i}
     plot_master_curve_fit(freq, G_meas, fit_dict, save_path=fit_dir / "fit.png",
                           title=f"{args.material} — Prony fit ({args.n_terms} terms)")
 
-    print(f"-> {prony_path(args.material).relative_to(REPO_ROOT)}")
+    print(f"-> {abaqus_input_path(args.material).relative_to(REPO_ROOT)}")
     print(f"-> {fit_dir.relative_to(REPO_ROOT)}/{{fit.png, fit_data.csv}}")
 
 

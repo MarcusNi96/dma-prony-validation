@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from py3.paths import REPO_ROOT, fea_results_dir, fea_results_path, processed_csv
+from py3.paths import REPO_ROOT, processed_csv
 
 G_ACCEL = 9.81  # m/s^2
 
@@ -115,14 +115,13 @@ def plot_transmissibility(f_meas, T_meas, f_fea, T_fea, save_path, title=None):
 def main():
     args = parse_args()
 
-    # FEA side
-    fea_path = fea_results_path(args.material, args.experiment)
+    fea_dir  = REPO_ROOT / "results" / args.material / "validation" / args.experiment
+    fea_path = fea_dir / "result.json"
     if not fea_path.exists():
         raise SystemExit(f"FEA result not found: {fea_path}")
     f_fea, a_mass_fea = load_fea(fea_path)
     T_fea = a_mass_fea / G_ACCEL
 
-    # Measured side
     shaker_run = (args.shaker_run if args.shaker_run is not None
                   else args.experiment[len("shaker_"):]
                        if args.experiment.startswith("shaker_") else args.experiment)
@@ -137,7 +136,7 @@ def main():
     print(f"measured  : {len(f_meas)} pts, f = {f_meas.min():g} - {f_meas.max():g} Hz "
           f"-> {meas_path.relative_to(REPO_ROOT)}")
 
-    out = fea_results_dir(args.material, args.experiment) / "transmissibility.png"
+    out = fea_dir / "transmissibility.png"
     plot_transmissibility(f_meas, T_meas, f_fea, T_fea, save_path=out,
                           title=f"{args.material} / {args.experiment}")
     print(f"-> {out.relative_to(REPO_ROOT)}")

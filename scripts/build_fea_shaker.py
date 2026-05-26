@@ -1,23 +1,19 @@
-"""Abaqus FEA build for the 3D linear shaker test (Python 2.7, runs in Abaqus).
+"""Abaqus FEA build for the 3D shaker test (Python 2.7, runs in Abaqus).
 
 Run via:
     abaqus cae noGUI=scripts/build_fea_shaker.py -- \
-        --material <m> --experiment <name> [--shaker-run <run>]
+        --material <m> --config <name>
 
-Loads:
-    config/<material>/base.json          nu, rho
-    results/<material>/prony.json        G_inf, prony{g_i, tau_i}, wlf{C1, C2, T_ref_C}
-    config/shaker/<exp>.json             mass_kg, geometry, ...
-    data/<material>/shaker/<run>.csv     measured base accel for TabularAmplitude
-                                         (defaults to --experiment with the
-                                         'shaker_' prefix stripped)
+Loads two JSON files (see main() - flat, explicit):
+    results/<material>/abaqus_input.json  base{nu, rho, G_inf} + prony{...} + wlf{...}
+    config/shaker/<config>.json           mass_kg, mass_width, thickness/diameters,
+                                          f_min, f_max, base_accel, ...
 
 Writes:
-    simulations/<material>-<exp>/                       Abaqus job working dir
-    results/<material>/validation/<exp>/result.json     history output (post-run)
+    simulations/<material>/<config>/                       Abaqus job working dir
+    results/<material>/validation/<config>/result.json     history output (post-run)
 """
 import argparse
-import csv
 import math
 import os
 import sys
@@ -27,10 +23,6 @@ from abaqusConstants import *
 from caeModules import *
 import odbAccess
 
-# ---- FEA knobs (tweak here) ----
-TEST_NAME = "3d_linear_shaker"
-SEED_SIZE = 0.003     # m, mesh seed
-N_FREQ = 50           # SteadyStateDirect points across the measured range
 
 
 def _find_repo_root():
@@ -50,10 +42,7 @@ def _find_repo_root():
 
 sys.path.insert(0, _find_repo_root())
 
-from py27.paths import (
-    REPO_ROOT, fea_job_dir, fea_results_path,
-    load_experiment, load_material, processed_csv,
-)
+from py27.paths import REPO_ROOT, load_json
 from py27.history_access import HistoryAccess, export
 
 
@@ -69,106 +58,37 @@ def parse_args():
 
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--material", required=True)
-    p.add_argument("--experiment", required=True,
-                   help="experiment name, e.g. shaker_1g_ds_33mm_6mm_573g")
-    p.add_argument("--shaker-run", default=None,
-                   help="processed shaker CSV stem under data/<material>/shaker/. "
-                        "Default: --experiment with leading 'shaker_' stripped.")
+    p.add_argument("--config", required=True,
+                   help="config name, e.g. 1g_258g (matches config/shaker/<config>.json)")
     args, _unknown = p.parse_known_args(argv)
     return args
 
 
-# ---------- config loaders (boring) ----------
+# ---------- FEA knobs ----------
 
-def shaker_freq_range(csv_path):
-    """Return (f_min_hz, f_max_hz) from the measured shaker CSV."""
-    freqs = []
-    with open(csv_path, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            freqs.append(float(row["freq_hz"]))
-    if not freqs:
-        raise RuntimeError("no rows in %s" % csv_path)
-    return min(freqs), max(freqs)
+N_FREQ = 20           # SteadyStateDirect points across the measured range
+SEED_SIZE = 0.003     # m, mesh seed (unused at the moment, kept for future use)
 
 
-def load_all_configs(material, experiment, shaker_run):
-    """Pull everything off disk in one place. Returns a dict; downstream code
-    reads from it explicitly so it's obvious what each Abaqus call depends on."""
-    mat = load_material(material)             # base.json + prony.json merged
-    exp = load_experiment(experiment)
-    if shaker_run is None:
-        shaker_run = experiment[len("shaker_"):] if experiment.startswith("shaker_") else experiment
-    shaker_csv = processed_csv(material, "shaker", shaker_run)
-    f_min_hz, f_max_hz = shaker_freq_range(shaker_csv)
+# ---------- glue ----------
 
-    cfg = {
-        "material":   material,
-        "experiment": experiment,
-        "test_name":  TEST_NAME,
-        "model_name": "Model-1",
-        # material constants
-        "nu":      float(mat["nu"]),
-        "rho":     float(mat["rho"]),
-        "G_inf":   float(mat["G_inf"]),
-        # derived: long-term Young's for the FEA *Elastic card
-        "E_inf":   2.0 * (1.0 + float(mat["nu"])) * float(mat["G_inf"]),
-        # Prony series
-        "g_i":     [float(g) for g in mat["prony"]["g_i"]],
-        "tau_i":   [float(t) for t in mat["prony"]["tau_i"]],
-        # WLF (optional - Abaqus *VISCOELASTIC card needs all three)
-        "wlf":     mat.get("wlf"),
-        # experiment geometry / mass
-        "mass_kg":          float(exp["mass_kg"]),
-        "mass_width":       float(exp["mass_width"]),
-        "thickness_m":      float(exp["thickness_m"]),
-        "outer_diameter_m": float(exp["outer_diameter_m"]),
-        "inner_diameter_m": float(exp["inner_diameter_m"]),
-        # frequency range derived from the measured shaker CSV
-        "f_min":            f_min_hz,
-        "f_max":            f_max_hz,
-        "n_freq":           N_FREQ,
-        # other experiment fields passed through as-is for the model builder
-        "experiment_raw":   exp,
-        # IO paths
-        "shaker_csv":  shaker_csv,
-        "job_dir":     fea_job_dir(material, experiment),
-        "results_json": fea_results_path(material, experiment),
-    }
-    return cfg
+def main():
+    args = parse_args()
 
+    # Two explicit JSON reads. Each value below comes from exactly one file.
+    material     = load_json("results/%s/abaqus_input.json" % args.material)
+    config       = load_json("config/shaker/%s.json" % args.config)
 
-def summarize(cfg):
-    print("=" * 60)
-    print("material        : nu=%g, rho=%g, G_inf=%.3e Pa, E_inf=%.3e Pa"
-          % (cfg["nu"], cfg["rho"], cfg["G_inf"], cfg["E_inf"]))
-    print("prony           : %d terms (tau range %.2e .. %.2e s)"
-          % (len(cfg["g_i"]),
-             min(cfg["tau_i"]) if cfg["tau_i"] else float("nan"),
-             max(cfg["tau_i"]) if cfg["tau_i"] else float("nan")))
-    if cfg["wlf"]:
-        print("wlf             : C1=%.3f, C2=%.3f K, T_ref=%.1f C"
-              % (cfg["wlf"]["C1"], cfg["wlf"]["C2"], cfg["wlf"]["T_ref_C"]))
-    else:
-        print("wlf             : (none in prony.json)")
-    print("experiment      : mass=%g kg, mass_width=%g m, t=%g m, OD=%g m, ID=%g m"
-          % (cfg["mass_kg"], cfg["mass_width"], cfg["thickness_m"],
-             cfg["outer_diameter_m"], cfg["inner_diameter_m"]))
-    print("freq range      : %.2f .. %.2f Hz (%d pts, from shaker CSV)"
-          % (cfg["f_min"], cfg["f_max"], cfg["n_freq"]))
-    print("shaker csv      : %s" % os.path.relpath(cfg["shaker_csv"], REPO_ROOT))
-    print("job dir         : %s" % os.path.relpath(cfg["job_dir"], REPO_ROOT))
-    print("=" * 60)
-
-
-# ---------- Abaqus build (your math goes here) ----------
-
-def build_model(cfg):
+    # chdir to the job dir so Abaqus writes .cae/.odb/.log there
+    job_dir = os.path.join(REPO_ROOT, "simulations", args.material, args.config)
+    if not os.path.exists(job_dir):
+        os.makedirs(job_dir)
+    os.chdir(job_dir)
 
     ### Sketch and Part
-    OUTER_D = cfg["outer_diameter_m"]
-    INNER_D = cfg["inner_diameter_m"]
-    THICKNESS = cfg["thickness_m"]
+    OUTER_D = config["outer_diameter_m"]
+    INNER_D = config["inner_diameter_m"]
+    THICKNESS = config["thickness_m"]
 
     m = mdb.models["Model-1"]
     s = m.ConstrainedSketch(name="__profile__", sheetSize=0.1)
@@ -234,12 +154,12 @@ def build_model(cfg):
     p.Set(name="TangentialEdges", edges=p.edges.findAt(*[(pt,) for pt in tangential_pts]))
 
     # --- material + section ---
-    NAME = cfg["material"]
-    NU = cfg["nu"]
-    RHO = cfg["rho"]
-    G_INF = cfg["G_inf"]
-    g_I = cfg["g_i"]
-    TAU_I = cfg["tau_i"]
+    NAME = args.material
+    NU = material["base"]["nu"]
+    RHO = material["base"]["rho"]
+    G_INF = material["prony"]["G_inf"]
+    g_I = material["prony"]["g_i"]
+    TAU_I = material["prony"]["tau_i"]
 
     E_INF = G_INF*2*(1+NU)
 
@@ -260,8 +180,8 @@ def build_model(cfg):
 
         # --- assembly ---
 
-    GAP = cfg["mass_width"]
-    MASS_KG = cfg["mass_kg"]
+    GAP = config["mass_width"]
+    MASS_KG = config["mass_kg"]
     a = m.rootAssembly
     a.Instance(name="Left-disk", part=p, dependent=ON)
     a.rotate(
@@ -314,9 +234,9 @@ def build_model(cfg):
     )
     p.generateMesh()
 
-    F_MIN  = cfg["f_min"]
-    F_MAX  = cfg["f_max"]
-    N_FREQ = 20
+    F_MIN  = config["f_min"]
+    F_MAX  = config["f_max"]
+    BASE_A = config["base_accel"]   # m/s^2
 
     m.SteadyStateDirectStep(
         name="Frequency", previous="Initial",
@@ -324,8 +244,10 @@ def build_model(cfg):
         scale=LINEAR,
     )
 
+    # Drive constant-amplitude base acceleration BASE_A by setting the
+    # corresponding displacement amplitude u(f) = -BASE_A / (2*pi*f)^2.
     freqs = [F_MIN + i * (F_MAX - F_MIN) / (N_FREQ - 1) for i in range(N_FREQ)]
-    amp_data = tuple((f, 9.81 / -(2 * math.pi * f) ** 2) for f in freqs)
+    amp_data = tuple((f, -BASE_A / (2 * math.pi * f) ** 2) for f in freqs)
     print("amp_data:")
     for f, u in amp_data:
         print("  %.4f Hz -> %.6e" % (f, u))
@@ -352,8 +274,8 @@ def build_model(cfg):
     )
 
     # ---- submit job ----
-    job_name = "%s-%s" % (cfg["material"], cfg["experiment"])
-    mdb.Job(name=job_name, model=cfg["model_name"])
+    job_name = "%s-%s" % (args.material, args.config)
+    mdb.Job(name=job_name, model="Model-1")
     mdb.jobs[job_name].submit(consistencyChecking=OFF)
     mdb.jobs[job_name].waitForCompletion()
 
@@ -361,33 +283,17 @@ def build_model(cfg):
     mdb.saveAs(pathName=cae_path)
     print("Saved CAE: %s" % os.path.abspath(cae_path))
 
-    # ---- extract MassRP A2 from ODB -> results.json ----
-    results_path = cfg["results_json"]
-    results_dir = os.path.dirname(results_path)
+    # ---- extract MassRP A2 from ODB -> result.json ----
+    results_dir = os.path.join(REPO_ROOT, "results", args.material,
+                               "validation", args.config)
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
+    results_path = os.path.join(results_dir, "result.json")
     odb = odbAccess.openOdb(job_name + ".odb")
     results = HistoryAccess(odb).region("MassRP").name("A2").fetch()
     export(results, results_path)
     odb.close()
     print("Saved results: %s" % results_path)
-    
-# ---------- glue ----------
-
-def main():
-    args = parse_args()
-    cfg = load_all_configs(args.material, args.experiment, args.shaker_run)
-    summarize(cfg)
-
-    # Ensure job dir exists; chdir so Abaqus writes its files there
-    if not os.path.exists(cfg["job_dir"]):
-        os.makedirs(cfg["job_dir"])
-    cwd_before = os.getcwd()
-    os.chdir(cfg["job_dir"])
-    try:
-        build_model(cfg)
-    finally:
-        os.chdir(cwd_before)
 
 
 if __name__ == "__main__":
