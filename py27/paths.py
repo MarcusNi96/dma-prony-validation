@@ -2,7 +2,7 @@
 
 Uses os.path (not pathlib) to stay Py27-compatible. REPO_ROOT comes from
 __file__ so it works from any cwd. Only REPO_ROOT and load_json are
-needed — path composition (simulations/<m>/<exp>, results/<m>/...)
+needed - path composition (simulations/<m>/<exp>, results/<m>/...)
 happens inline in the build script.
 """
 import json
