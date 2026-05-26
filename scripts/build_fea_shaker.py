@@ -7,7 +7,7 @@ Run via:
 Loads:
     config/<material>/base.json          nu, rho
     results/<material>/prony.json        G_inf, prony{g_i, tau_i}, wlf{C1, C2, T_ref_C}
-    config/experiments/<exp>.json        mass_kg, geometry, ...
+    config/shaker/<exp>.json             mass_kg, geometry, ...
     data/<material>/shaker/<run>.csv     measured base accel for TabularAmplitude
                                          (defaults to --experiment with the
                                          'shaker_' prefix stripped)

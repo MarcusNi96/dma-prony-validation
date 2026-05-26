@@ -5,7 +5,7 @@ __file__ so it works from any cwd.
 
 Layout (must match py3/paths.py):
     config/<material>/base.json           nu, rho, G_inf
-    config/experiments/<name>.json        shaker test spec
+    config/shaker/<name>.json             shaker test spec
     data/<material>/<src_type>/<run>.csv  processed measurement data
     results/<material>/prony.json         Prony fit + (optionally) WLF
 """
@@ -48,7 +48,7 @@ def load_material(material):
 
 
 def load_experiment(name):
-    return load_json("config/experiments/%s.json" % name)
+    return load_json("config/shaker/%s.json" % name)
 
 
 def processed_csv(material, source_type, run):
