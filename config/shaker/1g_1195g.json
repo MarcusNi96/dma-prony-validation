@@ -1,0 +1,14 @@
+{
+  "mass_kg": 1.196,
+  "mass_disks": 0.0148,
+  "thickness_m": 0.006,
+  "outer_diameter_m": 0.0335,
+  "inner_diameter_m": 0.0118,
+  "mass_width": 0.09,
+  "i11": 8.9e-5,
+  "i22": 13e-5,
+  "i33": 13e-5,
+  "base_accel": 9.81,
+  "f_min": 10,
+  "f_max": 300
+}
