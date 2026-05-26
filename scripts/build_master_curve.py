@@ -24,7 +24,7 @@ from mastercurves import MasterCurve
 from mastercurves.transforms import Multiply
 from scipy.optimize import curve_fit
 
-from core.plots import plot_master_curve_diagnostic
+from py3.plots import plot_master_curve_diagnostic
 from py3.paths import REPO_ROOT, master_dir, processed_csv
 
 

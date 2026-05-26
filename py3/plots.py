@@ -6,18 +6,23 @@ Save with dpi=150. Caller decides the path.
 import numpy as np
 import matplotlib.pyplot as plt
 
-from core.mechanics import evaluate_prony_modulus
+
+def _evaluate_prony(freq_hz, G_inf, G_i, tau_i):
+    """Maxwell/Prony series evaluated at given frequencies (Pa, complex)."""
+    omega = 2 * np.pi * np.asarray(freq_hz)
+    x = omega[:, None] * np.asarray(tau_i)[None, :]
+    B = (x ** 2 + 1j * x) / (1 + x ** 2)
+    return G_inf + np.sum(np.asarray(G_i) * B, axis=1)
 
 
 def plot_master_curve_fit(freq, modulus_meas, fit, save_path, title=None):
     """Two panels: G' (loglog), G'' (loglog) in MPa.
 
-    fit is the dict returned by mechanics.fit_generalized_maxwell_model
-    (G_inf, G_i, tau_i).
+    fit is a dict with keys (G_inf, G_i, tau_i).
     """
     f_min, f_max = float(freq.min()), float(freq.max())
     freq_dense = np.logspace(np.log10(f_min), np.log10(f_max), 400)
-    G = evaluate_prony_modulus(freq_dense, fit["G_inf"], fit["G_i"], fit["tau_i"])
+    G = _evaluate_prony(freq_dense, fit["G_inf"], fit["G_i"], fit["tau_i"])
 
     with plt.rc_context({
         "font.size": 16, "axes.titlesize": 18, "axes.labelsize": 16,

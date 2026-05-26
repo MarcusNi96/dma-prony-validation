@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import nnls
 
-from core.plots import plot_master_curve_fit
+from py3.plots import plot_master_curve_fit
 from py3.paths import (
     REPO_ROOT, abaqus_input_path, load_json,
     master_dir, prony_fit_dir,
