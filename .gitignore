@@ -22,6 +22,7 @@ abaqus_acis.log
 *.jnl
 *.SMABulk
 *.SMAFocus
+ABQcaeK*
 simulations/
 tools/Job-*
 tools/abaqus*

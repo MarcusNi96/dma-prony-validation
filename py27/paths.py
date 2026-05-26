@@ -58,11 +58,11 @@ def processed_csv(material, source_type, run):
     return os.path.join(REPO_ROOT, "data", material, source_type, run)
 
 
-def fea_job_dir(material, test, experiment):
+def fea_job_dir(material, experiment):
     return os.path.join(REPO_ROOT, "simulations",
-                        "%s-%s-%s" % (material, test, experiment))
+                        "%s-%s" % (material, experiment))
 
 
-def fea_results_path(material, test, experiment):
+def fea_results_path(material, experiment):
     return os.path.join(REPO_ROOT, "results", material,
-                        "fea", test, experiment, "results.json")
+                        "validation", experiment, "result.json")

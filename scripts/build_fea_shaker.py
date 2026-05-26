@@ -13,8 +13,8 @@ Loads:
                                          'shaker_' prefix stripped)
 
 Writes:
-    simulations/<material>-<test>-<exp>/                  Abaqus job working dir
-    results/<material>/fea/<test>/<exp>/results.json      history output (post-run)
+    simulations/<material>-<exp>/                       Abaqus job working dir
+    results/<material>/validation/<exp>/result.json     history output (post-run)
 """
 import argparse
 import csv
@@ -60,8 +60,13 @@ from py27.history_access import HistoryAccess, export
 # ---------- argparse ----------
 
 def parse_args():
-    # Abaqus passes everything after `--` to the script; argparse handles that
-    # the same as a normal CLI.
+    # Abaqus 2022 passes its own CLI flags (-cae, -noGUI, -lmlog, -tmpdir ...)
+    # in sys.argv and may swallow the `--` separator. Use parse_known_args so
+    # argparse only consumes our long flags and ignores Abaqus's args.
+    argv = sys.argv[1:]
+    if "--" in argv:
+        argv = argv[argv.index("--") + 1:]
+
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--material", required=True)
     p.add_argument("--experiment", required=True,
@@ -69,7 +74,8 @@ def parse_args():
     p.add_argument("--shaker-run", default=None,
                    help="processed shaker CSV stem under data/<material>/shaker/. "
                         "Default: --experiment with leading 'shaker_' stripped.")
-    return p.parse_args()
+    args, _unknown = p.parse_known_args(argv)
+    return args
 
 
 # ---------- config loaders (boring) ----------
@@ -93,14 +99,14 @@ def load_all_configs(material, experiment, shaker_run):
     exp = load_experiment(experiment)
     if shaker_run is None:
         shaker_run = experiment[len("shaker_"):] if experiment.startswith("shaker_") else experiment
-    shaker_csv = processed_csv(material, "Model-1", shaker_run)
+    shaker_csv = processed_csv(material, "shaker", shaker_run)
     f_min_hz, f_max_hz = shaker_freq_range(shaker_csv)
 
     cfg = {
         "material":   material,
         "experiment": experiment,
         "test_name":  TEST_NAME,
-        "model_name": "Shaker",
+        "model_name": "Model-1",
         # material constants
         "nu":      float(mat["nu"]),
         "rho":     float(mat["rho"]),
@@ -110,7 +116,7 @@ def load_all_configs(material, experiment, shaker_run):
         # Prony series
         "g_i":     [float(g) for g in mat["prony"]["g_i"]],
         "tau_i":   [float(t) for t in mat["prony"]["tau_i"]],
-        # WLF (optional — Abaqus *VISCOELASTIC card needs all three)
+        # WLF (optional - Abaqus *VISCOELASTIC card needs all three)
         "wlf":     mat.get("wlf"),
         # experiment geometry / mass
         "mass_kg":          float(exp["mass_kg"]),
@@ -126,8 +132,8 @@ def load_all_configs(material, experiment, shaker_run):
         "experiment_raw":   exp,
         # IO paths
         "shaker_csv":  shaker_csv,
-        "job_dir":     fea_job_dir(material, TEST_NAME, experiment),
-        "results_json": fea_results_path(material, TEST_NAME, experiment),
+        "job_dir":     fea_job_dir(material, experiment),
+        "results_json": fea_results_path(material, experiment),
     }
     return cfg
 
@@ -159,6 +165,7 @@ def summarize(cfg):
 
 def build_model(cfg):
 
+    ### Sketch and Part
     OUTER_D = cfg["outer_diameter_m"]
     INNER_D = cfg["inner_diameter_m"]
     THICKNESS = cfg["thickness_m"]
@@ -364,6 +371,7 @@ def build_model(cfg):
     export(results, results_path)
     odb.close()
     print("Saved results: %s" % results_path)
+    
 # ---------- glue ----------
 
 def main():
