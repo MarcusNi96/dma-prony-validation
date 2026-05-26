@@ -84,14 +84,14 @@ def master_dir(material):
     return results_dir(material) / "master"
 
 
-def fea_results_dir(material, test, experiment):
-    return results_dir(material) / "fea" / test / experiment
+def fea_results_dir(material, experiment):
+    return results_dir(material) / "validation" / experiment
 
 
-def fea_results_path(material, test, experiment):
-    return fea_results_dir(material, test, experiment) / "results.json"
+def fea_results_path(material, experiment):
+    return fea_results_dir(material, experiment) / "result.json"
 
 
-def fea_job_dir(material, test, experiment):
+def fea_job_dir(material, experiment):
     """Abaqus working files."""
-    return REPO_ROOT / "simulations" / f"{material}-{test}-{experiment}"
+    return REPO_ROOT / "simulations" / f"{material}-{experiment}"
