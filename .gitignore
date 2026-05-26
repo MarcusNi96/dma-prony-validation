@@ -44,6 +44,7 @@ uv.lock
 # Keep the processor + its README tracked.
 data/raw/*
 !data/raw/process_dma.py
+!data/raw/process_shaker.py
 !data/raw/README.md
 
 # Pipeline outputs — regenerable from data/ + config/.
