@@ -160,6 +160,9 @@ def main():
     G_INF = material["prony"]["G_inf"]
     g_I = material["prony"]["g_i"]
     TAU_I = material["prony"]["tau_i"]
+    REF_TEMP = material["wlf"]["T_ref_C"]
+    C1 = material["wlf"]["C1"]
+    C2 = material["wlf"]["C2"]
 
     E_INF = G_INF*2*(1+NU)
 
@@ -171,6 +174,8 @@ def main():
         domain=FREQUENCY, frequency=PRONY,
         table=tuple((g, 0.0, t) for g, t in zip(g_I, TAU_I)),
     )
+    m.materials[NAME].viscoelastic.Trs(table=((REF_TEMP, C1, C2), ))
+    
     m.HomogeneousSolidSection(name="Rubber-Sec", material=NAME, thickness=None)
     p.Set(cells=p.cells[:], name="All")
     p.SectionAssignment(
@@ -219,6 +224,7 @@ def main():
     faces_left  = a.instances["Left-disk"].sets["BaseFace"].faces
     a.Set(name="BaseFaces", faces=faces_right + faces_left)
 
+
     # --- mesh ---
     p.seedEdgeByBias(biasMethod=DOUBLE, endEdges=p.sets["RadialEdges"].edges,
                      ratio=5.0, number=10, constraint=FINER)
@@ -233,16 +239,33 @@ def main():
         ),
     )
     p.generateMesh()
+    p.Set(name="AllNodes", nodes=p.nodes)
 
     F_MIN  = config["f_min"]
     F_MAX  = config["f_max"]
     BASE_A = config["base_accel"]   # m/s^2
+    TEMPERATURE = 40#config["temperature"]
 
     m.SteadyStateDirectStep(
         name="Frequency", previous="Initial",
         frequencyRange=((F_MIN, F_MAX, N_FREQ, 1.0),),
         scale=LINEAR,
     )
+
+    # Predefined temperature for the WLF/TRS shift. Applied per-instance:
+    # an assembly-level Set built from raw mesh nodes across multiple dependent
+    # instances silently fails to write to the .inp.
+    for inst_name in ("Left-disk", "Right-disk"):
+        m.Temperature(
+            name='TField-%s' % inst_name,
+            createStepName='Initial',
+            region=a.instances[inst_name].sets["AllNodes"],
+            distributionType=UNIFORM,
+            crossSectionDistribution=CONSTANT_THROUGH_THICKNESS,
+            magnitudes=(TEMPERATURE,),
+        )
+        print(TEMPERATURE)
+
 
     # Drive constant-amplitude base acceleration BASE_A by setting the
     # corresponding displacement amplitude u(f) = -BASE_A / (2*pi*f)^2.
@@ -272,7 +295,6 @@ def main():
         name="H-accel-base", createStepName="Frequency",
         variables=("A2",), region=a.allSets["BaseFaces"],
     )
-
     # ---- submit job ----
     job_name = "%s-%s" % (args.material, args.config)
     mdb.Job(name=job_name, model="Model-1")

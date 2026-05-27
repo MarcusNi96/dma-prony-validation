@@ -9,6 +9,7 @@
   "i22": 13e-5,
   "i33": 13e-5,
   "base_accel": 9.81,
+  "temperature": 21.0,
   "f_min": 10,
   "f_max": 300
 }
