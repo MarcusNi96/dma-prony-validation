@@ -1,0 +1,11 @@
+EPDM Master curve
+python .\scripts\build_master_curve.py --material epdm_70 --run tf_015p.csv
+
+EPDM Prony
+python .\scripts\fit_prony.py --materia epdm_70
+
+EPDM validation at diffrent temperatures
+abaqus cae noGUI=scripts/build_fea_shaker.py -- --material epdm_70 --config 1g_573g --temperature 11 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material epdm_70 --config 1g_573g --temperature 21 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material epdm_70 --config 1g_573g --temperature 31 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material epdm_70 --config 1g_573g --temperature 41 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material epdm_70 --config 1g_573g --temperature 51
+
+Materia A validation at different temperatures
+abaqus cae noGUI=scripts/build_fea_shaker.py -- --material material_a --config 1g_573g --temperature 11 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material material_a --config 1g_573g --temperature 21 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material material_a --config 1g_573g --temperature 31 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material material_a --config 1g_573g --temperature 41 ; abaqus cae noGUI=scripts/build_fea_shaker.py -- --material material_a --config 1g_573g --temperature 51

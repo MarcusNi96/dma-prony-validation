@@ -60,17 +60,11 @@ def parse_args():
     p.add_argument("--material", required=True)
     p.add_argument("--config", required=True,
                    help="config name, e.g. 1g_258g (matches config/shaker/<config>.json)")
+    p.add_argument("--temperature", type=float, default=None,
+                   help="uniform temperature (deg C) for WLF/TRS shift; omit for no predefined field")
     args, _unknown = p.parse_known_args(argv)
     return args
 
-
-# ---------- FEA knobs ----------
-
-N_FREQ = 20           # SteadyStateDirect points across the measured range
-SEED_SIZE = 0.003     # m, mesh seed (unused at the moment, kept for future use)
-
-
-# ---------- glue ----------
 
 def main():
     args = parse_args()
@@ -243,8 +237,14 @@ def main():
 
     F_MIN  = config["f_min"]
     F_MAX  = config["f_max"]
+    N_FREQ = 60
     BASE_A = config["base_accel"]   # m/s^2
-    TEMPERATURE = 40#config["temperature"]
+
+    if args.temperature is None:
+        TEMPERATURE = config["temperature"]
+    else:
+        TEMPERATURE = args.temperature
+
 
     m.SteadyStateDirectStep(
         name="Frequency", previous="Initial",
@@ -252,10 +252,8 @@ def main():
         scale=LINEAR,
     )
 
-    # Predefined temperature for the WLF/TRS shift. Applied per-instance:
-    # an assembly-level Set built from raw mesh nodes across multiple dependent
-    # instances silently fails to write to the .inp.
-    for inst_name in ("Left-disk", "Right-disk"):
+
+    for inst_name in ("Left-disk", "Right-disk"): #This is probably unnecessary, but i had some trouble making a single set
         m.Temperature(
             name='TField-%s' % inst_name,
             createStepName='Initial',
@@ -310,7 +308,7 @@ def main():
                                "validation", args.config)
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
-    results_path = os.path.join(results_dir, "result.json")
+    results_path = os.path.join(results_dir, "result_T"+str(int(round(TEMPERATURE)))+ ".json")
     odb = odbAccess.openOdb(job_name + ".odb")
     results = HistoryAccess(odb).region("MassRP").name("A2").fetch()
     export(results, results_path)
