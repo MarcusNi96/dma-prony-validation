@@ -151,14 +151,12 @@ def main():
     NAME = args.material
     NU = material["base"]["nu"]
     RHO = material["base"]["rho"]
-    G_INF = material["prony"]["G_inf"]
+    E_INF = material["prony"]["E_inf"]
     g_I = material["prony"]["g_i"]
     TAU_I = material["prony"]["tau_i"]
     REF_TEMP = material["wlf"]["T_ref_C"]
     C1 = material["wlf"]["C1"]
     C2 = material["wlf"]["C2"]
-
-    E_INF = G_INF*2*(1+NU)
 
 
     m.Material(name=NAME)

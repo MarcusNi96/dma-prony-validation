@@ -61,19 +61,11 @@ def load_master(material):
     return freq, G
 
 
-def resolve_g_inf(args, base):
-    """Apply the precedence rules and return (g_inf_or_None, origin_label)."""
-    if args.g_inf is not None:
-        return args.g_inf, "--g-inf"
-    if args.fit_g_inf:
-        return None, "--fit-g-inf (free NNLS parameter)"
-    g_inf = base.get("G_inf")
-    if g_inf is None:
-        return None, "(none provided; free NNLS parameter)"
-    return float(g_inf), f"config/{args.material}/base.json"
 
 
-def save_abaqus_input(material, base, G_inf, G_ins, g_i, tau_i, source_info, wlf=None):
+
+def save_abaqus_input(material, base, G_inf, G_ins, E_inf, E_ins,
+                      g_i, tau_i, source_info, wlf=None):
     out = {
         "base":  base,                   # verbatim copy of config/<material>/base.json
         "prony": {
@@ -81,6 +73,8 @@ def save_abaqus_input(material, base, G_inf, G_ins, g_i, tau_i, source_info, wlf
             # g_i = G_i / G_ins, with G_ins = G_inf + sum(G_i).
             "G_inf": float(G_inf),
             "G_ins": float(G_ins),
+            "E_inf": float(E_inf),
+            "E_ins": float(E_ins),
             "g_i":   [float(g) for g in g_i],
             "tau_i": [float(t) for t in tau_i],
         },
@@ -119,10 +113,21 @@ def main():
     wlf_path = master_dir(args.material) / "wlf.json"
     wlf = json.loads(wlf_path.read_text()) if wlf_path.exists() else None
 
-    G_inf, origin = resolve_g_inf(args, base)
-
     ### Main part
 
+    E_inf = base.get("E_inf")
+    nu = base.get("nu")
+    if args.fit_g_inf:
+        G_inf = None
+        origin = "--fit-g-inf (free NNLS parameter)"
+    elif E_inf is None:
+        G_inf = None
+        origin = "(none provided; free NNLS parameter)"
+    else:
+        G_inf = E_inf/(2*(1+nu))
+        origin = f"config/{args.material}/base.json"
+
+    print(E_inf)
 
     omega_k =   2*np.pi*freq
 
@@ -163,6 +168,11 @@ def main():
 
     g_i = G_i/G_ins
 
+    print(sum(g_i))
+
+    E_inf = G_inf*2*(1+nu)
+    E_ins = G_ins*2*(1+nu)
+
     
 
     # Save outputs
@@ -170,7 +180,7 @@ def main():
     fit_dir.mkdir(parents=True, exist_ok=True)
     abaqus_input_path(args.material).parent.mkdir(parents=True, exist_ok=True)
 
-    save_abaqus_input(args.material, base, G_inf, G_ins, g_i, tau_i,
+    save_abaqus_input(args.material, base, G_inf, G_ins, E_inf, E_ins, g_i, tau_i,
                       source_info={
                           "method": "nnls_maxwell",
                           "n_terms": args.n_terms,
@@ -182,8 +192,9 @@ def main():
               f"T_ref={wlf['T_ref_C']:.1f} °C  (embedded in abaqus_input.json)")
     save_fit_data_csv(fit_dir / "fit_data.csv", freq, G_meas, G_fit)
     fit_dict = {"G_inf": G_inf, "G_i": G_i, "tau_i": tau_i}
+    material_pretty = args.material.replace("_", " ").upper()
     plot_master_curve_fit(freq, G_meas, fit_dict, save_path=fit_dir / "fit.png",
-                          title=f"{args.material} — Prony fit ({args.n_terms} terms)")
+                          title=f"{material_pretty}, Prony fit ({args.n_terms} terms)")
 
     print(f"-> {abaqus_input_path(args.material).relative_to(REPO_ROOT)}")
     print(f"-> {fit_dir.relative_to(REPO_ROOT)}/{{fit.png, fit_data.csv}}")
