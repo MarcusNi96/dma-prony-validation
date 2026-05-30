@@ -8,7 +8,7 @@
   "i11": 8.9e-5,
   "i22": 13e-5,
   "i33": 13e-5,
-  "base_accel": 9.81,
+  "base_accel": 0.981,
   "temperature": 21.0,
   "f_min": 200,
   "f_max": 800
